@@ -1,4 +1,4 @@
-using SparseArrays, FMIImport
+using SparseArrays, FMIBase, SparseDiffTools
 
 function fmi2dependencyKindToDependencyIndex(kind::fmi2DependencyKind)
     if kind == fmi2DependencyKindDependent
@@ -63,4 +63,8 @@ function Base.getindex(D::DependencyMatrix, i::UInt32, j::UInt32)
 end
 function Base.getindex(D::DependencyMatrix, i::Vector{UInt32}, j::Vector{UInt32})
     return D.matrix[getindex.(Ref(D.vr_idx_dict), i), getindex.(Ref(D.vr_idx_dict), j)]
+end
+
+function get_coloring(D::DependencyMatrix, f_refs::Vector{UInt32}, x_refs::Vector{UInt32}, row_based::Bool = false)
+    return matrix_colors(D[f_refs, x_refs], partition_by_rows = row_based)
 end

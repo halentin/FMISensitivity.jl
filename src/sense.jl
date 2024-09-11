@@ -1002,7 +1002,6 @@ abstract type FMUSensitivities end
 
 mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
     valid::Bool
-    colored::Bool
     component::C
 
     mtx::Matrix{T}
@@ -1016,7 +1015,7 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
     f::F 
 
     #cache::FiniteDiff.JacobianCache
-    #colors::
+    default_coloring_col::Vector{Int}
 
     validations::Int
     colorings::Int
@@ -1057,8 +1056,15 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
         
         inst.valid = false
         inst.validations = 0
-        inst.colored = false
-        inst.colorings = 0
+
+        if component.fmu.executionConfig.use_sparsity_information
+            if isnothing(component.dependency_matrix)
+                component.dependency_matrix = DependencyMatrix(component.fmu.modelDescription)
+            end
+            inst.default_coloring_col = get_coloring(component.dependency_matrix, f_refs, x_refs)
+        else
+            inst.default_coloring_col = []
+        end
         
         return inst
     end
@@ -1067,7 +1073,6 @@ end
 
 mutable struct FMUGradient{C, T, F} <: FMUSensitivities
     valid::Bool
-    colored::Bool
     component::C
 
     vec::Vector{T}
@@ -1081,10 +1086,8 @@ mutable struct FMUGradient{C, T, F} <: FMUSensitivities
     f::F 
 
     #cache::FiniteDiff.GradientCache
-    #colors::
 
     validations::Int
-    colorings::Int
 
     function FMUGradient{T}(component::C, f_refs::Union{Vector{UInt32}, Tuple{Symbol, Vector{UInt32}}}, x_refs::Union{UInt32, Symbol}) where {C, T}
 
@@ -1120,8 +1123,6 @@ mutable struct FMUGradient{C, T, F} <: FMUSensitivities
 
         inst.valid = false
         inst.validations = 0
-        inst.colored = false
-        inst.colorings = 0
         
         return inst
     end
@@ -1172,11 +1173,6 @@ function FMIBase.check_invalidate!(vrs, sens::FMUSensitivities)
         end
     end
 
-    return nothing 
-end
-
-function uncolor!(jac::FMUSensitivities)
-    jac.colored = false 
     return nothing 
 end
 
@@ -1231,15 +1227,6 @@ function validate!(grad::FMUGradient, x::Real)
     grad.valid = true 
     return nothing
 end
-    
-function color!(sens::FMUSensitivities)
-    # ToDo
-    # colors = SparseDiffTools.matrix_colors(sparsejac)
-
-    sens.colorings += 1
-    sens.colored = true 
-    return nothing
-end
 
 function ref_length(ref::AbstractArray)
     return length(ref)
@@ -1276,9 +1263,6 @@ function update!(jac::FMUJacobian, x)
         validate!(jac, x)
     end
 
-    if !jac.colored
-        color!(jac)
-    end
     return nothing
 end
 
@@ -1296,9 +1280,6 @@ function update!(gra::FMUGradient, x)
         validate!(gra, x)
     end
 
-    if !gra.colored
-        color!(gra)
-    end
     return nothing
 end
 

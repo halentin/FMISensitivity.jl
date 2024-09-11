@@ -10,21 +10,21 @@ using FMISensitivity.FMIBase.FMICore
 
 using FMISensitivity.FMIBase: getContinuousStates, getReal, getRealType, getEventIndicators, getDirectionalDerivative
 
-fmu = loadFMU("Waterhammer_massFlowPulse_10V_2.fmu")
+fmu = loadFMU("Waterhammer_massFlowPulse_150V_3.fmu")
 md = fmu.modelDescription
 c, _ = FMIImport.prepareSolveFMU(fmu, nothing, :ME; loggingOn=true)
 # mVs= modelVariablesForValueReference.(Ref(md), md.stateValueReferences)
 # names = [v[1].name for v in mVs]
-include("dependency_matrix.jl")
-dep_mtx = DependencyMatrix(md)
-ddx_dx_template = dep_mtx[md.derivativeValueReferences, md.stateValueReferences]
+# include("dependency_matrix.jl")
+# dep_mtx = DependencyMatrix(md)
+# ddx_dx_template = dep_mtx[md.derivativeValueReferences, md.stateValueReferences]
 ## Only keep "dependent"-Dependencies"
 # ddx_dx_template[x->(x>4)]
 # ddx_dx_template[findall(x->(x<5), ddx_dx_template)] .=0
 # dropzeros(ddx_dx_template)
-using SparseDiffTools
-colorvec = matrix_colors(ddx_dx_template)
-maximum(colorvec)
+# using SparseDiffTools
+# colorvec = matrix_colors(ddx_dx_template)
+# maximum(colorvec)
 
 fmu.executionConfig.eval_t_gradients = true
 
@@ -75,3 +75,27 @@ _f(x)
 j_fwd = ForwardDiff.jacobian(_f, x)
 j_rwd = ReverseDiff.jacobian(_f, x)
 j_rwd == zeros(43,43)
+reset!(c)
+_f = _x -> fmu(;x=_x, dx=dx, dx_refs=:all)
+_f(x)
+j_fwd = ForwardDiff.jacobian(_f, x)
+j_rwd = ReverseDiff.jacobian(_f, x)
+
+
+reset!(c)
+_f = _u -> fmu(; u=_u, u_refs=u_refs, dx_refs=:all)
+_f(u)
+j_fwd = ForwardDiff.jacobian(_f, u)
+j_rwd = ReverseDiff.jacobian(_f, u)
+
+reset!(c)
+_f = _x -> fmu(;x=_x, y_refs=y_refs)
+_f(x)
+j_fwd = ForwardDiff.jacobian(_f, x)
+j_rwd = ReverseDiff.jacobian(_f, x)
+
+
+reset!(c)
+_f = _t -> fmu(; t=_t, dx_refs=:all)
+_f(t)
+j_fwd = ForwardDiff.derivative(_f, t)
