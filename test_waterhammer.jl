@@ -10,7 +10,8 @@ using FMISensitivity.FMIBase.FMICore
 
 using FMISensitivity.FMIBase: getContinuousStates, getReal, getRealType, getEventIndicators, getDirectionalDerivative
 
-fmu = loadFMU("Waterhammer_massFlowPulse_150V_3.fmu")
+# fmu = loadFMU("Waterhammer_massFlowPulse_150V_3.fmu")
+fmu = loadFMU("SpringFrictionPendulumExtForce1D.fmu")
 md = fmu.modelDescription
 c, _ = FMIImport.prepareSolveFMU(fmu, nothing, :ME; loggingOn=true)
 # mVs= modelVariablesForValueReference.(Ref(md), md.stateValueReferences)
@@ -19,7 +20,7 @@ c, _ = FMIImport.prepareSolveFMU(fmu, nothing, :ME; loggingOn=true)
 # dep_mtx = DependencyMatrix(md)
 # ddx_dx_template = dep_mtx[md.derivativeValueReferences, md.stateValueReferences]
 ## Only keep "dependent"-Dependencies"
-# ddx_dx_template[x->(x>4)]
+# ddx_dx_template[x->(x>4)] 
 # ddx_dx_template[findall(x->(x<5), ddx_dx_template)] .=0
 # dropzeros(ddx_dx_template)
 # using SparseDiffTools

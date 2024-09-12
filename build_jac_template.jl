@@ -131,3 +131,6 @@ function n_hot(len::Int, i::Vector{Int})
 end
 
 n_hot(5, [1,4])
+
+test = [1, 2, 3, 4, 2,4, 1]
+findall(x->x==3,test)

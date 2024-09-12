@@ -1016,6 +1016,7 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
 
     #cache::FiniteDiff.JacobianCache
     default_coloring_col::Vector{Int}
+    n_colors::Int
 
     validations::Int
     colorings::Int
@@ -1061,9 +1062,17 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
             if isnothing(component.dependency_matrix)
                 component.dependency_matrix = DependencyMatrix(component.fmu.modelDescription)
             end
-            inst.default_coloring_col = get_coloring(component.dependency_matrix, f_refs, x_refs)
+            if isa(f_refs, Tuple)
+                inst.default_coloring_col = []
+                inst.n_colors = -1 #get_coloring(component.dependency_matrix, f_refs[2], x_refs)
+            else
+                inst.default_coloring_col = get_coloring(component.dependency_matrix, f_refs, x_refs)
+                inst.n_colors = maximum(inst.default_coloring_col)
+                @info "Created coloring: " length(x_refs) inst.n_colors
+            end
         else
             inst.default_coloring_col = []
+            inst.n_colors = -1
         end
         
         return inst
@@ -1182,6 +1191,12 @@ function onehot(c::FMUInstance, len::Integer, i::Integer) # [ToDo] this could be
     return ret 
 end
 
+function multihot(c::FMUInstance, len::Integer, i::Vector{Int}) # [ToDo] this could be solved without allocations
+    ret = zeros(getRealType(c), len)
+    ret[i] .= 1.0
+    return ret 
+end
+
 function validate!(jac::FMUJacobian, x::AbstractVector)
 
     rows = length(jac.f_refs)
@@ -1191,8 +1206,14 @@ function validate!(jac::FMUJacobian, x::AbstractVector)
         # ToDo: use directional derivatives with sparsitiy information!
         # ToDo: Optimize allocation (onehot)
         # [Note] Jacobian is sampled column by column
-        for i in 1:cols
-            getDirectionalDerivative!(jac.component, jac.f_refs, jac.x_refs, onehot(jac.component, cols, i), view(jac.mtx, 1:rows, i))
+        if jac.n_colors != -1
+            for i in 1:maximum(jac.default_coloring_col)
+                getDirectionalDerivative!(jac.component, jac.f_refs, jac.x_refs, multihot(jac.component, cols, findall(x->x==i,jac.default_coloring_col)), view(jac.mtx, 1:rows, i))
+            end
+        else
+            for i in 1:cols
+                getDirectionalDerivative!(jac.component, jac.f_refs, jac.x_refs, onehot(jac.component, cols, i), view(jac.mtx, 1:rows, i))
+            end
         end
     elseif jac.component.fmu.executionConfig.sensitivity_strategy == :FMIAdjointDerivative && providesAdjointDerivatives(jac.component.fmu) && !isa(jac.f_refs, Tuple) && !isa(jac.x_refs, Symbol)
         # ToDo: use directional derivatives with sparsitiy information!
@@ -1203,7 +1224,11 @@ function validate!(jac::FMUJacobian, x::AbstractVector)
         end
     else #if jac.component.fmu.executionConfig.sensitivity_strategy == :FiniteDiff
         # cache = FiniteDiff.JacobianCache(x)
-        FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x) # , cache)
+        if jac.n_colors != -1
+            FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x, colorvec=jac.default_coloring_col) # , cache)
+        else
+            FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x) # , cache)
+        end
     # else
     #     @assert false "Unknown sensitivity strategy `$(jac.component.fmu.executionConfig.sensitivity_strategy)`."
     end
