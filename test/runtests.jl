@@ -43,6 +43,8 @@ function getFMUStruct(modelname, mode, tool=ENV["EXPORTINGTOOL"], version=ENV["E
 end
 
 @testset "FMIImport.jl" begin
+    @info "Adjoint Sensitivity Tests use the VanDerPol-ReferenceFMU, which contains binaries for all OSes."
+    include("adjoints.jl")
     if Sys.iswindows() || Sys.islinux()
         @info "Automated testing is supported on Windows/Linux."
         

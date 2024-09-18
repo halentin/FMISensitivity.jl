@@ -1180,12 +1180,6 @@ function uncolor!(jac::FMUSensitivities)
     return nothing 
 end
 
-function onehot(c::FMUInstance, len::Integer, i::Integer) # [ToDo] this could be solved without allocations
-    ret = zeros(getRealType(c), len)
-    ret[i] = 1.0
-    return ret 
-end
-
 function validate!(jac::FMUJacobian, x::AbstractVector)
 
     rows = length(jac.f_refs)
@@ -1196,14 +1190,16 @@ function validate!(jac::FMUJacobian, x::AbstractVector)
         # ToDo: Optimize allocation (onehot)
         # [Note] Jacobian is sampled column by column
         for i in 1:cols
-            getDirectionalDerivative!(jac.component, jac.f_refs, jac.x_refs, onehot(jac.component, cols, i), view(jac.mtx, 1:rows, i))
+            getDirectionalDerivative!(jac.component, jac.f_refs, [jac.x_refs[i]], [1.0], view(jac.mtx, 1:rows, i))
         end
     elseif jac.component.fmu.executionConfig.sensitivity_strategy == :FMIAdjointDerivative && providesAdjointDerivatives(jac.component.fmu) && !isa(jac.f_refs, Tuple) && !isa(jac.x_refs, Symbol)
         # ToDo: use directional derivatives with sparsitiy information!
         # ToDo: Optimize allocation (onehot)
         # [Note] Jacobian is sampled row by row
+        result = zeros(getRealType(jac.component), cols)
         for i in 1:rows
-            getAdjointDerivative!(jac.component, jac.f_refs, jac.x_refs, onehot(jac.component, rows, i), view(jac.mtx, 1:cols, i))
+            getAdjointDerivative!(jac.component, [jac.f_refs[i]], jac.x_refs, [1.0], result)
+            jac.mtx[i, 1:cols] = result
         end
     else #if jac.component.fmu.executionConfig.sensitivity_strategy == :FiniteDiff
         # cache = FiniteDiff.JacobianCache(x)
