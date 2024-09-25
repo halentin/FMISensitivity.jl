@@ -132,12 +132,15 @@ _f = _x -> fmu(;x=_x, dx_refs=:all)
 _f(x)
 j_fwd = ForwardDiff.jacobian(_f, x)
 j_rwd = ReverseDiff.jacobian(_f, x)
+# j_fid = FiniteDiff.finite_difference_jacobian(_f, x)
+# j_fid = FiniteDiff.finite_difference_jacobian(_f, x)
 j_zyg = CHECK_ZYGOTE ? Zygote.jacobian(_f, x)[1] : nothing
 # j_smp = sampleJacobian(c, fmu.modelDescription.derivativeValueReferences, fmu.modelDescription.stateValueReferences)
 # j_get = getJacobian(c, fmu.modelDescription.derivativeValueReferences, fmu.modelDescription.stateValueReferences)
 
 @test isapprox(j_fwd, ∂ẋ_∂x; atol=atol)
 @test isapprox(j_rwd, ∂ẋ_∂x; atol=atol)
+# @test isapprox(j_fid, ∂ẋ_∂x; atol=atol)
 @test CHECK_ZYGOTE ? isapprox(j_zyg, ∂ẋ_∂x; atol=atol) : true
 # @test isapprox(j_smp, ∂ẋ_∂x; atol=atol)
 # @test isapprox(j_get, ∂ẋ_∂x; atol=atol)
@@ -152,14 +155,17 @@ _f = _x -> fmu(;x=_x, dx_refs=:all)
 _f(x)
 j_fwd = ForwardDiff.jacobian(_f, x)
 j_rwd = ReverseDiff.jacobian(_f, x)
+# j_fid = FiniteDiff.finite_difference_jacobian(_f, x)
 j_zyg = CHECK_ZYGOTE ? Zygote.jacobian(_f, x)[1] : nothing
 
 @test isapprox(j_fwd, ∂ẋ_∂x; atol=atol)
 @test isapprox(j_rwd, ∂ẋ_∂x; atol=atol)
+# @test isapprox(j_fid, ∂ẋ_∂x; atol=atol)
 @test CHECK_ZYGOTE ? isapprox(j_zyg, ∂ẋ_∂x; atol=atol) : true
 
 # End: Test build-in derivatives (slow) only for jacobian A
 fmu.executionConfig.VJPBuiltInDerivatives = false
+
 
 @test c.solution.evals_∂ẋ_∂x == (CHECK_ZYGOTE ? 10 : 8)
 @test c.solution.evals_∂ẋ_∂u == 0
@@ -395,13 +401,14 @@ j_zyg = CHECK_ZYGOTE ? Zygote.jacobian(_f, t)[1] : nothing
 reset!(c)
 
 # Jacobian ∂ẋ/∂p
-#if FMU_SUPPORTS_PARAMETER_SAMPLING
+if FMU_SUPPORTS_PARAMETER_SAMPLING
      _f = _p -> fmu(;p=_p, p_refs=p_refs, dx_refs=:all)
      _f(p)
      j_fwd = ForwardDiff.jacobian(_f, p)
      j_rwd = ReverseDiff.jacobian(_f, p)
      j_zyg = CHECK_ZYGOTE ? Zygote.jacobian(_f, p)[1] : nothing
-
+     println(j_fwd)
+     println(c.∂ẋ_∂p)
      @test isapprox(j_fwd, ∂ẋ_∂p; atol=atol)
      @test isapprox(j_rwd, ∂ẋ_∂p; atol=atol)
      @test CHECK_ZYGOTE ? isapprox(j_zyg, ∂ẋ_∂p; atol=atol) : true
@@ -421,10 +428,10 @@ reset!(c)
      @test c.solution.evals_∂e_∂p == 0
      @test c.solution.evals_∂e_∂t == 0
      reset!(c)
-#end
+end
 
 # Jacobian ∂y/∂p
-#if FMU_SUPPORTS_PARAMETER_SAMPLING
+if FMU_SUPPORTS_PARAMETER_SAMPLING
      _f = _p -> fmu(;p=_p, p_refs=p_refs, y_refs=y_refs)
      _f(p)
      j_fwd = ForwardDiff.jacobian(_f, p)
@@ -450,7 +457,7 @@ reset!(c)
      @test c.solution.evals_∂e_∂p == 0
      @test c.solution.evals_∂e_∂t == 0
      reset!(c)
-#end
+end
 
 # Jacobian ∂e/∂x
 _f = function(_x)
@@ -470,6 +477,7 @@ j_zyg = CHECK_ZYGOTE ? Zygote.jacobian(_f, x)[1] : nothing
 
 @test isapprox(j_fwd, ∂e_∂x; atol=atol)
 @test isapprox(j_rwd, ∂e_∂x; atol=atol)
+# @test isapprox(j_fid, ∂e_∂x; atol=atol)
 @test CHECK_ZYGOTE ? isapprox(j_zyg, j_rwd; atol=atol) : true
 
 @test c.solution.evals_∂ẋ_∂x == 0

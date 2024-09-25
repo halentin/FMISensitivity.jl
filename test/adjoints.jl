@@ -1,5 +1,7 @@
 using FMIImport, FMIZoo
 using FMISensitivity
+import FMISensitivity.validate!
+using Test
 import FMISensitivity.ForwardDiff
 
 
@@ -15,40 +17,55 @@ function invalidate_all()
         FMISensitivity.invalidate!(field)
     end
 end
+function delete_all()
+    for sens in [:∂ẋ_∂x, :∂ẋ_∂u, :∂ẋ_∂p, :∂ẋ_∂t, :∂y_∂x, :∂y_∂u, :∂y_∂p, :∂y_∂t, :∂e_∂x, :∂e_∂u, :∂e_∂p, :∂e_∂t]
+        setfield!(c, sens, nothing)
+    end
+end
 
 invalidate_all()
-
+delete_all()
 myFMU.executionConfig.sensitivity_strategy = :FMIDirectionalDerivative
 j_fwd = ForwardDiff.jacobian(f, x)
 @test j_fwd == known_result
 
 invalidate_all()
+delete_all()
 
 myFMU.executionConfig.sensitivity_strategy = :FMIAdjointDerivative
 j_fwd = ForwardDiff.jacobian(f, x)
 @test j_fwd == known_result
 
-invalidate_all()
 
+invalidate_all()
+delete_all()
 myFMU.executionConfig.sensitivity_strategy = :default
 j_fwd = ForwardDiff.jacobian(f, x)
 @test j_fwd == known_result
 
 
-# using BenchmarkTools
+using BenchmarkTools
 
-# function calc_der()
-#     invalidate_all()
-#     j_fwd = ForwardDiff.jacobian(f, x)
-# end
+function calc_der()
+    invalidate_all()
+    ForwardDiff.jacobian(f, x)
+end
+
+delete_all()
+myFMU.executionConfig.sensitivity_strategy = :FMIDirectionalDerivative
+@btime calc_der()
+delete_all()
+myFMU.executionConfig.sensitivity_strategy = :FMIAdjointDerivative
+@btime calc_der()
+delete_all()
+myFMU.executionConfig.sensitivity_strategy = :default
+@btime calc_der()
 
 
-# myFMU.executionConfig.sensitivity_strategy = :FMIDirectionalDerivative
-# @btime calc_der()
-
-# myFMU.executionConfig.sensitivity_strategy = :FMIAdjointDerivative
-# @btime calc_der()
-
-# myFMU.executionConfig.sensitivity_strategy = :default
-# @btime calc_der()
-
+function test_validate()
+    invalidate_all()
+    FMISensitivity.validate!(c.∂ẋ_∂x, x)
+end
+invalidate_all()
+test_validate()
+@btime test_validate()

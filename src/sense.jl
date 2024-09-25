@@ -1012,6 +1012,7 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
     f_refs::Union{Vector{UInt32}, Tuple{Symbol, Vector{UInt32}}}
     x_refs::Union{Vector{UInt32}, Symbol}
     f_refs_set::Union{Set, Nothing}
+    perturbation::Vector{T}
 
     f::F 
 
@@ -1051,7 +1052,12 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
         inst.f_refs_set = f_refs_set
         inst.x_refs = x_refs
         
-        inst.mtx = zeros(T, f_len, x_len)
+        # store transpose of the jacobian for sensitivity_strategy == :FMIAdjointDerivative for memory efficient access 
+        if component.fmu.executionConfig.sensitivity_strategy == :FMIAdjointDerivative
+            inst.mtx = zeros(T, x_len, f_len)
+        else
+            inst.mtx = zeros(T, f_len, x_len)
+        end
         inst.jvp = zeros(T, f_len)
         inst.vjp = zeros(T, x_len)
         
@@ -1059,11 +1065,28 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
         inst.validations = 0
         inst.colored = false
         inst.colorings = 0
+
+        inst.perturbation = ones(T, 1)
         
         return inst
     end
 
-end 
+end
+
+function Base.getproperty(obj::FMUJacobian, sym::Symbol)
+    c = getfield(obj, :component)
+    if c.fmu.executionConfig.sensitivity_strategy == :FMIAdjointDerivative
+        if sym == :mtx
+            return getfield(obj,:mtx)'
+        elseif sym == :mtx_actual
+            return getfield(obj,:mtx)
+        else
+            return getfield(obj, sym)
+        end
+    else
+        return getfield(obj, sym)
+   end
+end
 
 mutable struct FMUGradient{C, T, F} <: FMUSensitivities
     valid::Bool
@@ -1187,19 +1210,15 @@ function validate!(jac::FMUJacobian, x::AbstractVector)
 
     if jac.component.fmu.executionConfig.sensitivity_strategy == :FMIDirectionalDerivative && providesDirectionalDerivatives(jac.component.fmu) && !isa(jac.f_refs, Tuple) && !isa(jac.x_refs, Symbol)
         # ToDo: use directional derivatives with sparsitiy information!
-        # ToDo: Optimize allocation (onehot)
         # [Note] Jacobian is sampled column by column
         for i in 1:cols
-            getDirectionalDerivative!(jac.component, jac.f_refs, [jac.x_refs[i]], [1.0], view(jac.mtx, 1:rows, i))
+            getDirectionalDerivative!(jac.component, jac.f_refs, view(jac.x_refs,i), jac.perturbation, view(jac.mtx, :, i))
         end
     elseif jac.component.fmu.executionConfig.sensitivity_strategy == :FMIAdjointDerivative && providesAdjointDerivatives(jac.component.fmu) && !isa(jac.f_refs, Tuple) && !isa(jac.x_refs, Symbol)
         # ToDo: use directional derivatives with sparsitiy information!
-        # ToDo: Optimize allocation (onehot)
         # [Note] Jacobian is sampled row by row
-        result = zeros(getRealType(jac.component), cols)
         for i in 1:rows
-            getAdjointDerivative!(jac.component, [jac.f_refs[i]], jac.x_refs, [1.0], result)
-            jac.mtx[i, 1:cols] = result
+            getAdjointDerivative!(jac.component, view(jac.f_refs,i), jac.x_refs, jac.perturbation, view(jac.mtx_actual, :, i))
         end
     else #if jac.component.fmu.executionConfig.sensitivity_strategy == :FiniteDiff
         # cache = FiniteDiff.JacobianCache(x)
