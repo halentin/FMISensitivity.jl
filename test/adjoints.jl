@@ -44,28 +44,28 @@ j_fwd = ForwardDiff.jacobian(f, x)
 @test j_fwd == known_result
 
 
-using BenchmarkTools
+# using BenchmarkTools
 
-function calc_der(f,x)
-    invalidate_all()
-    ForwardDiff.jacobian(f, x)
-end
+# function calc_der(f,x)
+#     invalidate_all()
+#     ForwardDiff.jacobian(f, x)
+# end
 
-delete_all()
-myFMU.executionConfig.sensitivity_strategy = :FMIDirectionalDerivative
-@btime calc_der($f,$x)
-delete_all()
-myFMU.executionConfig.sensitivity_strategy = :FMIAdjointDerivative
-@btime calc_der($f,$x)
-delete_all()
-myFMU.executionConfig.sensitivity_strategy = :default
-@btime calc_der($f,$x)
+# delete_all()
+# myFMU.executionConfig.sensitivity_strategy = :FMIDirectionalDerivative
+# @btime calc_der($f,$x)
+# delete_all()
+# myFMU.executionConfig.sensitivity_strategy = :FMIAdjointDerivative
+# @btime calc_der($f,$x)
+# delete_all()
+# myFMU.executionConfig.sensitivity_strategy = :default
+# @btime calc_der($f,$x)
 
 
-function test_validate(c, x)
-    invalidate_all()
-    FMISensitivity.validate!(c.∂ẋ_∂x, x)
-end
-invalidate_all()
-test_validate()
-@btime test_validate($c, $x)
+# function test_validate(c, x)
+#     invalidate_all()
+#     FMISensitivity.validate!(c.∂ẋ_∂x, x)
+# end
+# invalidate_all()
+# test_validate()
+# @btime test_validate($c, $x)

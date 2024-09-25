@@ -1013,6 +1013,7 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
     x_refs::Union{Vector{UInt32}, Symbol}
     f_refs_set::Union{Set, Nothing}
     perturbation::Vector{T}
+    store_transpose::Bool
 
     f::F 
 
@@ -1055,8 +1056,10 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
         # store transpose of the jacobian for sensitivity_strategy == :FMIAdjointDerivative for memory efficient access 
         if component.fmu.executionConfig.sensitivity_strategy == :FMIAdjointDerivative
             inst.mtx = zeros(T, x_len, f_len)
+            inst.store_transpose = true
         else
             inst.mtx = zeros(T, f_len, x_len)
+            inst.store_transpose = false
         end
         inst.jvp = zeros(T, f_len)
         inst.vjp = zeros(T, x_len)
@@ -1074,8 +1077,7 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
 end
 
 function Base.getproperty(obj::FMUJacobian, sym::Symbol)
-    c = getfield(obj, :component)
-    if c.fmu.executionConfig.sensitivity_strategy == :FMIAdjointDerivative
+    if getfield(obj, :store_transpose)
         if sym == :mtx
             return getfield(obj,:mtx)'
         elseif sym == :mtx_actual
