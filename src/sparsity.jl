@@ -16,6 +16,9 @@ struct DependencyMatrix
     vr_idx_dict::Dict
 end
 
+# From FMI3-Standard:  
+# If dependencies is not present, it must be assumed that the unknown depends on all knowns. If dependencies is present as empty list, the unknown depends on none of the knowns.
+
 DependencyMatrix(md::fmi2ModelDescription) = begin
     vrs = [mV.valueReference for mV in md.modelVariables]
     sort!(vrs); unique!(vrs)
@@ -31,6 +34,8 @@ DependencyMatrix(md::fmi2ModelDescription) = begin
                     dependency_kind = dep_info.dependenciesKind[idx]
                     dep_mtx[vr_idx_dict[dependent_vR], vr_idx_dict[dependency_vR]] = fmi2dependencyKindToDependencyIndex(dependency_kind)
                 end
+            else
+                dep_mtx[vr_idx_dict[dependent_vR], :] .= 5
             end
         end
     end
@@ -52,6 +57,8 @@ DependencyMatrix(md::fmi3ModelDescription) = begin
                     dependency_kind = dep_info.dependenciesKind[idx]
                     dep_mtx[vr_idx_dict[dependent_vR], vr_idx_dict[dependency_vR]] = fmi3dependencyKindToDependencyIndex(dependency_kind)
                 end
+            else
+                dep_mtx[vr_idx_dict[dependent_vR], :] .= 5
             end
         end
     end

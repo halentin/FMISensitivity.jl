@@ -95,8 +95,6 @@ using BenchmarkTools
 result = zeros(2)
 using FMIBase: getDirectionalDerivative!
 
-end
-
 function onehot(c::FMUInstance, len::Integer, i::Integer) # [ToDo] this could be solved without allocations
     ret = zeros(getRealType(c), len)
     ret[i] = 1.0

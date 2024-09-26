@@ -7,7 +7,7 @@ import FMISensitivity.ForwardDiff
 
 myFMU = loadFMU("VanDerPol", "ModelicaReferenceFMUs", "0.0.30", "3.0")
 c, _ = FMIImport.prepareSolveFMU(myFMU, nothing, :ME)
-
+# myFMU.executionConfig.use_sparsity_information = false
 x = [2.0, 0.0]
 known_result = [[0.0, -1.0] [1.0, -3.0]] # Analytic Solution for the Jacobian at [2.0, 0.0] with μ=1.0
 f = x->myFMU(;x=x, dx_refs=:all)
@@ -27,6 +27,7 @@ invalidate_all()
 delete_all()
 myFMU.executionConfig.sensitivity_strategy = :FMIDirectionalDerivative
 j_fwd = ForwardDiff.jacobian(f, x)
+c.dependency_matrix.matrix
 @test j_fwd == known_result
 
 invalidate_all()
