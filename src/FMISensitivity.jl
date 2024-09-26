@@ -29,5 +29,6 @@ using FMIBase: undual, unsense, untrack
 include("utils.jl")
 include("sense.jl")
 include("hotfixes.jl")
+include("sparsity.jl")
 
 end # module

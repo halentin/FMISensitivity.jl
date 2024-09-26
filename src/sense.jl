@@ -1002,7 +1002,6 @@ abstract type FMUSensitivities end
 
 mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
     valid::Bool
-    colored::Bool
     component::C
 
     mtx::Matrix{T}
@@ -1018,10 +1017,12 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
     f::F 
 
     #cache::FiniteDiff.JacobianCache
-    #colors::
+    default_coloring_col::Vector{Int}
+    n_colors::Int
 
     validations::Int
     colorings::Int
+    colored::Bool
 
     function FMUJacobian{T}(component::C, f_refs::Union{Vector{UInt32}, Tuple{Symbol, Vector{UInt32}}}, x_refs::Union{Vector{UInt32}, Symbol}) where {C, T}
 
@@ -1070,6 +1071,23 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
         inst.colorings = 0
 
         inst.perturbation = ones(T, 1)
+
+        if component.fmu.executionConfig.use_sparsity_information
+            if isnothing(component.dependency_matrix)
+                component.dependency_matrix = DependencyMatrix(component.fmu.modelDescription)
+            end
+            if isa(f_refs, Tuple)
+                inst.default_coloring_col = []
+                inst.n_colors = -1 #get_coloring(component.dependency_matrix, f_refs[2], x_refs)
+            else
+                inst.default_coloring_col = get_coloring(component.dependency_matrix, f_refs, x_refs)
+                inst.n_colors = maximum(inst.default_coloring_col)
+                @info "Created coloring: " length(x_refs) inst.n_colors
+            end
+        else
+            inst.default_coloring_col = []
+            inst.n_colors = -1
+        end
         
         return inst
     end
@@ -1092,7 +1110,6 @@ end
 
 mutable struct FMUGradient{C, T, F} <: FMUSensitivities
     valid::Bool
-    colored::Bool
     component::C
 
     vec::Vector{T}
@@ -1106,10 +1123,8 @@ mutable struct FMUGradient{C, T, F} <: FMUSensitivities
     f::F 
 
     #cache::FiniteDiff.GradientCache
-    #colors::
 
     validations::Int
-    colorings::Int
 
     function FMUGradient{T}(component::C, f_refs::Union{Vector{UInt32}, Tuple{Symbol, Vector{UInt32}}}, x_refs::Union{UInt32, Symbol}) where {C, T}
 
@@ -1145,8 +1160,6 @@ mutable struct FMUGradient{C, T, F} <: FMUSensitivities
 
         inst.valid = false
         inst.validations = 0
-        inst.colored = false
-        inst.colorings = 0
         
         return inst
     end
@@ -1200,9 +1213,19 @@ function FMIBase.check_invalidate!(vrs, sens::FMUSensitivities)
     return nothing 
 end
 
-function uncolor!(jac::FMUSensitivities)
-    jac.colored = false 
-    return nothing 
+# function uncolor!(jac::FMUSensitivities)
+#     jac.colored = false 
+#     return nothing 
+# function onehot(c::FMUInstance, len::Integer, i::Integer) # [ToDo] this could be solved without allocations
+#     ret = zeros(getRealType(c), len)
+#     ret[i] = 1.0
+#     return ret 
+# end
+
+function multihot(c::FMUInstance, len::Integer, i::Vector{Int}) # [ToDo] this could be solved without allocations
+    ret = zeros(getRealType(c), len)
+    ret[i] .= 1.0
+    return ret 
 end
 
 function validate!(jac::FMUJacobian, x::AbstractVector)
@@ -1213,8 +1236,14 @@ function validate!(jac::FMUJacobian, x::AbstractVector)
     if jac.component.fmu.executionConfig.sensitivity_strategy == :FMIDirectionalDerivative && providesDirectionalDerivatives(jac.component.fmu) && !isa(jac.f_refs, Tuple) && !isa(jac.x_refs, Symbol)
         # ToDo: use directional derivatives with sparsitiy information!
         # [Note] Jacobian is sampled column by column
-        for i in 1:cols
-            getDirectionalDerivative!(jac.component, jac.f_refs, view(jac.x_refs,i), jac.perturbation, view(jac.mtx, :, i))
+        if jac.n_colors != -1
+            for i in 1:maximum(jac.default_coloring_col)
+                getDirectionalDerivative!(jac.component, jac.f_refs, jac.x_refs, multihot(jac.component, cols, findall(x->x==i,jac.default_coloring_col)), view(jac.mtx, :, i))
+            end
+        else
+            for i in 1:cols
+                getDirectionalDerivative!(jac.component, jac.f_refs, view(jac.x_refs,i), jac.perturbation, view(jac.mtx, :, i))
+            end
         end
     elseif jac.component.fmu.executionConfig.sensitivity_strategy == :FMIAdjointDerivative && providesAdjointDerivatives(jac.component.fmu) && !isa(jac.f_refs, Tuple) && !isa(jac.x_refs, Symbol)
         # ToDo: use directional derivatives with sparsitiy information!
@@ -1224,7 +1253,11 @@ function validate!(jac::FMUJacobian, x::AbstractVector)
         end
     else #if jac.component.fmu.executionConfig.sensitivity_strategy == :FiniteDiff
         # cache = FiniteDiff.JacobianCache(x)
-        FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x) # , cache)
+        if jac.n_colors != -1
+            FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x, colorvec=jac.default_coloring_col) # , cache)
+        else
+            FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x) # , cache)
+        end
     # else
     #     @assert false "Unknown sensitivity strategy `$(jac.component.fmu.executionConfig.sensitivity_strategy)`."
     end
@@ -1246,15 +1279,6 @@ function validate!(grad::FMUGradient, x::Real)
 
     grad.validations += 1
     grad.valid = true 
-    return nothing
-end
-    
-function color!(sens::FMUSensitivities)
-    # ToDo
-    # colors = SparseDiffTools.matrix_colors(sparsejac)
-
-    sens.colorings += 1
-    sens.colored = true 
     return nothing
 end
 
@@ -1293,9 +1317,6 @@ function update!(jac::FMUJacobian, x)
         validate!(jac, x)
     end
 
-    if !jac.colored
-        color!(jac)
-    end
     return nothing
 end
 
@@ -1313,9 +1334,6 @@ function update!(gra::FMUGradient, x)
         validate!(gra, x)
     end
 
-    if !gra.colored
-        color!(gra)
-    end
     return nothing
 end
 
