@@ -1018,6 +1018,7 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
 
     #cache::FiniteDiff.JacobianCache
     default_coloring_col::Vector{Int}
+    sparsity_pattern::Matrix{Int}
     n_colors::Int
 
     validations::Int
@@ -1080,7 +1081,7 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
                 inst.default_coloring_col = []
                 inst.n_colors = -1 #get_coloring(component.dependency_matrix, f_refs[2], x_refs)
             else
-                inst.default_coloring_col = get_coloring(component.dependency_matrix, f_refs, x_refs)
+                inst.default_coloring_col, inst.sparsity_pattern = get_coloring(component.dependency_matrix, f_refs, x_refs)
                 inst.n_colors = maximum(inst.default_coloring_col)
                 @info "Created coloring: " length(x_refs) inst.n_colors
             end
@@ -1254,7 +1255,7 @@ function validate!(jac::FMUJacobian, x::AbstractVector)
     else #if jac.component.fmu.executionConfig.sensitivity_strategy == :FiniteDiff
         # cache = FiniteDiff.JacobianCache(x)
         if jac.n_colors != -1
-            FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x, colorvec=jac.default_coloring_col) # , cache)
+            FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x, colorvec=jac.default_coloring_col, sparsity=jac.sparsity_pattern) # , cache)
         else
             FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x) # , cache)
         end

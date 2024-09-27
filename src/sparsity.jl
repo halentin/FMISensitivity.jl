@@ -73,5 +73,44 @@ function Base.getindex(D::DependencyMatrix, i::Vector{UInt32}, j::Vector{UInt32}
 end
 
 function get_coloring(D::DependencyMatrix, f_refs::Vector{UInt32}, x_refs::Vector{UInt32}, row_based::Bool = false)
-    return matrix_colors(D[f_refs, x_refs], partition_by_rows = row_based)
+    return matrix_colors(D[f_refs, x_refs], partition_by_rows = row_based), D[f_refs, x_refs]
 end
+
+## Plan für Decrompression:
+# Funktion decompress, die aus Sparse Compressed und Compression Map Volle Matrix macht
+# Funktion decompression_map, die aus sparsity und coloring eine Decompression Map macht
+
+## Decompression Map:
+# Es reicht eine Matrix, die die Information enthält, in welche Spalte welcher Eintrag der  Matrix komprimierten kommt, 
+# weil Zeile ja immer beibehalten wird
+
+#[1 0 0 1
+# 1 0 1 0
+# 0 1 1 0
+# 0 1 0 1] bekommt das Coloring [1 1 2 2] und die Compression Map
+#[1 4
+# 1 3
+# 2 3
+# 2 4]
+# 
+function decompression_map(colorvec::Vector, sparsity::Matrix)
+    map = zeros(Int, size(sparsity)[1], maximum(colorvec))
+    nonzeros = findall(x-> x!=0, sparsity)
+    for i in 1:maximum(colorvec)
+        current_cols = findall(x->x==i, colorvec)
+        # map[:,i] = 
+        for nonzero in nonzeros[findall(x->x[2] in current_cols, nonzeros)]
+            map[nonzero[1],i] = nonzero[2] 
+        end
+    end
+    map
+end
+
+sparsity = [1 0 0 1
+            1 0 1 0
+            0 1 1 0
+            0 1 0 1]
+            
+colorvec = [1, 1, 2, 2]
+
+decompression_map(colorvec, sparsity)
