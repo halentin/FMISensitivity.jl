@@ -58,6 +58,12 @@ myFMU.executionConfig.sensitivity_strategy = :FMIDirectionalDerivative
 myFMU.executionConfig.sensitivity_strategy = :FiniteDiff
 j_fwd = ForwardDiff.jacobian(f, x)
 
+
+colorvec = c.∂ẋ_∂x.default_coloring_col
+sparsity = c.∂ẋ_∂x.sparsity_pattern
+
+map = decompression_map(colorvec, sparsity)
+
 @btime ForwardDiff.jacobian(f, x)
 function test()
     invalidate_all()

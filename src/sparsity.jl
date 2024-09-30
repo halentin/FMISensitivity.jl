@@ -98,7 +98,6 @@ function decompression_map(colorvec::Vector, sparsity::Matrix)
     nonzeros = findall(x-> x!=0, sparsity)
     for i in 1:maximum(colorvec)
         current_cols = findall(x->x==i, colorvec)
-        # map[:,i] = 
         for nonzero in nonzeros[findall(x->x[2] in current_cols, nonzeros)]
             map[nonzero[1],i] = nonzero[2] 
         end
@@ -106,11 +105,25 @@ function decompression_map(colorvec::Vector, sparsity::Matrix)
     map
 end
 
+function decompress_sparse(compressed, decompression_map::Matrix{Int})
+    decompressed = zeros(size(decompression_map)[1], maximum(decompression_map))
+    for idx in eachindex(IndexCartesian(), decompression_map)
+        if decompression_map[idx] == 0
+            decompressed[idx] = 0.0
+        else
+            decompressed[idx[1], decompression_map[idx]] = compressed[idx]
+        end
+    end
+    return decompressed
+end
+
 sparsity = [1 0 0 1
             1 0 1 0
-            0 1 1 0
+            0 1 0 0
             0 1 0 1]
             
 colorvec = [1, 1, 2, 2]
 
-decompression_map(colorvec, sparsity)
+# matrix_colors(sparsity, partition_by_rows = false)
+map = decompression_map(colorvec, sparsity)
+decom = decompress_sparse(ones(4,2), map)

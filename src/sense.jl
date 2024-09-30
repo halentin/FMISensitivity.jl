@@ -1019,6 +1019,7 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
     #cache::FiniteDiff.JacobianCache
     default_coloring_col::Vector{Int}
     sparsity_pattern::Matrix{Int}
+    decompression_map::Union{Matrix{Int}, Nothing}
     n_colors::Int
 
     validations::Int
@@ -1083,10 +1084,12 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
             else
                 inst.default_coloring_col, inst.sparsity_pattern = get_coloring(component.dependency_matrix, f_refs, x_refs)
                 inst.n_colors = maximum(inst.default_coloring_col)
+                inst.decompression_map = decompression_map(inst.default_coloring_col, inst.sparsity_pattern)
                 @info "Created coloring: " length(x_refs) inst.n_colors
             end
         else
             inst.default_coloring_col = []
+            inst.decompression_map = nothing
             inst.n_colors = -1
         end
         
@@ -1316,6 +1319,10 @@ function update!(jac::FMUJacobian, x)
 
     if !jac.valid
         validate!(jac, x)
+        # dirty patch until i figure out where to do decompression
+        if !isnothing(jac.decompression_map)
+            jac.mtx = decompress_sparse(jac.mtx, jac.decompression_map)
+        end
     end
 
     return nothing

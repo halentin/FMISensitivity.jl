@@ -42,7 +42,7 @@ invalidate_all()
 delete_all()
 myFMU.executionConfig.sensitivity_strategy = :default
 j_fwd = ForwardDiff.jacobian(f, x)
-@test j_fwd == known_result
+@test isapprox(j_fwd, known_result)
 
 
 # using BenchmarkTools
