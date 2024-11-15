@@ -1011,15 +1011,20 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
     f_refs::Union{Vector{UInt32}, Tuple{Symbol, Vector{UInt32}}}
     x_refs::Union{Vector{UInt32}, Symbol}
     f_refs_set::Union{Set, Nothing}
+    perturbation::Vector{T}
+    store_transpose::Bool
 
     f::F 
 
     #cache::FiniteDiff.JacobianCache
     default_coloring_col::Vector{Int}
+    sparsity_pattern::Matrix{Int}
+    decompression_map::Union{Matrix{Int}, Nothing}
     n_colors::Int
 
     validations::Int
     colorings::Int
+    colored::Bool
 
     function FMUJacobian{T}(component::C, f_refs::Union{Vector{UInt32}, Tuple{Symbol, Vector{UInt32}}}, x_refs::Union{Vector{UInt32}, Symbol}) where {C, T}
 
@@ -1051,12 +1056,23 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
         inst.f_refs_set = f_refs_set
         inst.x_refs = x_refs
         
-        inst.mtx = zeros(T, f_len, x_len)
+        # store transpose of the jacobian for sensitivity_strategy == :FMIAdjointDerivative for memory efficient access 
+        if component.fmu.executionConfig.sensitivity_strategy == :FMIAdjointDerivative
+            inst.mtx = zeros(T, x_len, f_len)
+            inst.store_transpose = true
+        else
+            inst.mtx = zeros(T, f_len, x_len)
+            inst.store_transpose = false
+        end
         inst.jvp = zeros(T, f_len)
         inst.vjp = zeros(T, x_len)
         
         inst.valid = false
         inst.validations = 0
+        inst.colored = false
+        inst.colorings = 0
+
+        inst.perturbation = ones(T, 1)
 
         if component.fmu.executionConfig.use_sparsity_information
             if isnothing(component.dependency_matrix)
@@ -1066,19 +1082,35 @@ mutable struct FMUJacobian{C, T, F} <: FMUSensitivities
                 inst.default_coloring_col = []
                 inst.n_colors = -1 #get_coloring(component.dependency_matrix, f_refs[2], x_refs)
             else
-                inst.default_coloring_col = get_coloring(component.dependency_matrix, f_refs, x_refs)
+                inst.default_coloring_col, inst.sparsity_pattern = get_coloring(component.dependency_matrix, f_refs, x_refs)
                 inst.n_colors = maximum(inst.default_coloring_col)
+                inst.decompression_map = decompression_map(inst.default_coloring_col, inst.sparsity_pattern)
                 @info "Created coloring: " length(x_refs) inst.n_colors
             end
         else
             inst.default_coloring_col = []
+            inst.decompression_map = nothing
             inst.n_colors = -1
         end
         
         return inst
     end
 
-end 
+end
+
+function Base.getproperty(obj::FMUJacobian, sym::Symbol)
+    if getfield(obj, :store_transpose)
+        if sym == :mtx
+            return getfield(obj,:mtx)'
+        elseif sym == :mtx_actual
+            return getfield(obj,:mtx)
+        else
+            return getfield(obj, sym)
+        end
+    else
+        return getfield(obj, sym)
+   end
+end
 
 mutable struct FMUGradient{C, T, F} <: FMUSensitivities
     valid::Bool
@@ -1185,11 +1217,14 @@ function FMIBase.check_invalidate!(vrs, sens::FMUSensitivities)
     return nothing 
 end
 
-function onehot(c::FMUInstance, len::Integer, i::Integer) # [ToDo] this could be solved without allocations
-    ret = zeros(getRealType(c), len)
-    ret[i] = 1.0
-    return ret 
-end
+# function uncolor!(jac::FMUSensitivities)
+#     jac.colored = false 
+#     return nothing 
+# function onehot(c::FMUInstance, len::Integer, i::Integer) # [ToDo] this could be solved without allocations
+#     ret = zeros(getRealType(c), len)
+#     ret[i] = 1.0
+#     return ret 
+# end
 
 function multihot(c::FMUInstance, len::Integer, i::Vector{Int}) # [ToDo] this could be solved without allocations
     ret = zeros(getRealType(c), len)
@@ -1204,28 +1239,26 @@ function validate!(jac::FMUJacobian, x::AbstractVector)
 
     if jac.component.fmu.executionConfig.sensitivity_strategy == :FMIDirectionalDerivative && providesDirectionalDerivatives(jac.component.fmu) && !isa(jac.f_refs, Tuple) && !isa(jac.x_refs, Symbol)
         # ToDo: use directional derivatives with sparsitiy information!
-        # ToDo: Optimize allocation (onehot)
         # [Note] Jacobian is sampled column by column
         if jac.n_colors != -1
             for i in 1:maximum(jac.default_coloring_col)
-                getDirectionalDerivative!(jac.component, jac.f_refs, jac.x_refs, multihot(jac.component, cols, findall(x->x==i,jac.default_coloring_col)), view(jac.mtx, 1:rows, i))
+                getDirectionalDerivative!(jac.component, jac.f_refs, jac.x_refs, multihot(jac.component, cols, findall(x->x==i,jac.default_coloring_col)), view(jac.mtx, :, i))
             end
         else
             for i in 1:cols
-                getDirectionalDerivative!(jac.component, jac.f_refs, jac.x_refs, onehot(jac.component, cols, i), view(jac.mtx, 1:rows, i))
+                getDirectionalDerivative!(jac.component, jac.f_refs, view(jac.x_refs,i), jac.perturbation, view(jac.mtx, :, i))
             end
         end
     elseif jac.component.fmu.executionConfig.sensitivity_strategy == :FMIAdjointDerivative && providesAdjointDerivatives(jac.component.fmu) && !isa(jac.f_refs, Tuple) && !isa(jac.x_refs, Symbol)
         # ToDo: use directional derivatives with sparsitiy information!
-        # ToDo: Optimize allocation (onehot)
         # [Note] Jacobian is sampled row by row
         for i in 1:rows
-            getAdjointDerivative!(jac.component, jac.f_refs, jac.x_refs, onehot(jac.component, rows, i), view(jac.mtx, 1:cols, i))
+            getAdjointDerivative!(jac.component, view(jac.f_refs,i), jac.x_refs, jac.perturbation, view(jac.mtx_actual, :, i))
         end
     else #if jac.component.fmu.executionConfig.sensitivity_strategy == :FiniteDiff
         # cache = FiniteDiff.JacobianCache(x)
         if jac.n_colors != -1
-            FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x, colorvec=jac.default_coloring_col) # , cache)
+            FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x, colorvec=jac.default_coloring_col, sparsity=jac.sparsity_pattern) # , cache)
         else
             FiniteDiff.finite_difference_jacobian!(jac.mtx, (_x, _dx) -> (jac.f(jac, _x, _dx)), x) # , cache)
         end
@@ -1286,6 +1319,10 @@ function update!(jac::FMUJacobian, x)
 
     if !jac.valid
         validate!(jac, x)
+        # dirty patch until i figure out where to do decompression
+        if !isnothing(jac.decompression_map)
+            jac.mtx = decompress_sparse(jac.mtx, jac.decompression_map)
+        end
     end
 
     return nothing
