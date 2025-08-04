@@ -134,6 +134,25 @@ end
 
 
 
+"""
+    compute_coo_from_coloring(sparsity_pattern, coloring)
+
+Compute the Coordinate list (COO) format from a given sparsity pattern and coloring, while keeping contents of a "compressed" column next to each other in memory. 
+
+# Arguments
+- `sparsity_pattern::AbstractMatrix{T}`: A matrix representing the sparsity pattern of the Jacobian, where non-zero entries indicate the presence of a non-zero element.
+- `coloring::AbstractVector{Int}`: A vector where each element represents the color assigned to the corresponding column in the sparsity pattern.
+
+# Returns
+- `I::Vector{Int}`: A vector containing the row indices of the non-zero elements in the COO format.
+- `J::Vector{Int}`: A vector containing the column indices of the non-zero elements in the COO format.
+
+# Description
+This function converts a given sparsity pattern and its corresponding coloring into the COO format. It iterates over each color and each row to identify the non-zero elements in the sparsity pattern. If more than one non-zero element is found in a row for a given color, an error is raised. If no non-zero elements are found, the coordinates of the first column of the current color are stored to maintain the shape of the value vector.
+
+# Errors
+- Throws an error if more than one non-zero entry is found in a row for a given color, indicating a mismatch between the coloring and the sparsity pattern.
+"""
 function compute_coo_from_coloring(sparsity_pattern, coloring)
     # Initialize lists to store COO format data
     # Row-Indices
@@ -163,7 +182,7 @@ function compute_coo_from_coloring(sparsity_pattern, coloring)
 end
 
 
-I, J = compute_coo_from_coloring(sparsity, [1,1,1,1])
+# I, J = compute_coo_from_coloring(sparsity, [1,1,1,1])
 values = ones(8)
 
 values = [1,2,3,4,5,6,7,8]

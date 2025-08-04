@@ -4,6 +4,7 @@ authors = ["TT <tobias.thummerer@informatik.uni-augsburg.de>", "LM <lars.mikelso
 version = "0.2.0"
 
 [deps]
+BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 FMIBase = "900ee838-d029-460e-b485-d98a826ceef2"
 FMIImport = "9fcbc62e-52a0-44e9-a616-1359a0008194"
 FMIZoo = "724179cf-c260-40a9-bd27-cccc6fe2f195"

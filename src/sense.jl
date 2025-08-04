@@ -1320,7 +1320,7 @@ function update!(jac::FMUJacobian, x)
     if !jac.valid
         validate!(jac, x)
         # dirty patch until i figure out where to do decompression
-        if !isnothing(jac.decompression_map)
+        if !isnothing(jac.decompression_map) && jac.component.fmu.executionConfig.sensitivity_strategy == :FMIDirectionalDerivative
             jac.mtx = decompress_sparse(jac.mtx, jac.decompression_map)
         end
     end
