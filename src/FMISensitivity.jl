@@ -15,10 +15,6 @@ import SciMLSensitivity: Zygote
 import FMIBase.ChainRulesCore
 using FMIBase.ChainRulesCore: ZeroTangent, NoTangent, @thunk
 
-import ForwardDiffChainRules
-using ForwardDiffChainRules: @ForwardDiff_frule
-using SciMLSensitivity.ReverseDiff: @grad_from_chainrules
-
 using SciMLSensitivity.LinearAlgebra
 
 using FMIBase
@@ -26,6 +22,10 @@ using FMIBase.FMICore
 using FMIBase: undual, unsense, untrack, FMUEvaluationOutput
 
 include("utils.jl")
-include("sense.jl")
+include("types.jl")
+include("primitives.jl")
+include("chainrules.jl")
+include("forwarddiff.jl")
+include("reversediff.jl")
 
 end # module

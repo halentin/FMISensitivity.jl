@@ -390,12 +390,12 @@ j_zyg = CHECK_ZYGOTE ? Zygote.jacobian(_f, x)[1] : nothing
 #@test isapprox(j_smp, ∂ẋ_∂x; atol=atol)
 #@test isapprox(j_get, ∂ẋ_∂x; atol=atol)
 
-@test c.solution.evals_∂ẋ_∂x == (CHECK_ZYGOTE ? 10 : 6)
+@test c.solution.evals_∂ẋ_∂x == (CHECK_ZYGOTE ? 10 : 4)
 @test c.solution.evals_∂ẋ_∂u == 0
 @test c.solution.evals_∂ẋ_∂p == 0
 @test c.solution.evals_∂ẋ_∂t == 0
 
-@test c.solution.evals_∂y_∂x == (CHECK_ZYGOTE ? 10 : 6)
+@test c.solution.evals_∂y_∂x == (CHECK_ZYGOTE ? 10 : 4)
 @test c.solution.evals_∂y_∂u == 0
 @test c.solution.evals_∂y_∂p == 0
 @test c.solution.evals_∂y_∂t == 0
@@ -421,12 +421,12 @@ j_smp = sampleJacobian(_f, x)
 @test isapprox(j_smp, vcat(∂ẋ_∂x, ∂y_∂x, ∂e_∂x); atol = atol)
 #@test isapprox(j_get, ∂ẋ_∂x; atol=atol)
 
-@test c.solution.evals_∂ẋ_∂x == (CHECK_ZYGOTE ? 1 : 38)
+@test c.solution.evals_∂ẋ_∂x == (CHECK_ZYGOTE ? 1 : 4)
 @test c.solution.evals_∂ẋ_∂u == 0
 @test c.solution.evals_∂ẋ_∂p == 0
 @test c.solution.evals_∂ẋ_∂t == 0
 
-@test c.solution.evals_∂y_∂x == (CHECK_ZYGOTE ? 1 : 38)
+@test c.solution.evals_∂y_∂x == (CHECK_ZYGOTE ? 1 : 4)
 @test c.solution.evals_∂y_∂u == 0
 @test c.solution.evals_∂y_∂p == 0
 @test c.solution.evals_∂y_∂t == 0
